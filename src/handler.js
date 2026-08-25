@@ -13,7 +13,7 @@ function handler(req, res) {
         message: `Olá, ${name}!`,
         method,
         path: req && req.url ? req.url : '/',
-        provider: 'GCP',
+        provider: 'AWS Lambda',
         status: 'success'
       });
   }

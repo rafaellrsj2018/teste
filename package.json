@@ -12,7 +12,8 @@
     "checkpoint",
     "http",
     "cloud",
-    "gcp"
+    "aws",
+    "lambda"
   ],
   "license": "MIT"
 }

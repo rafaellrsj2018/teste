@@ -4,7 +4,7 @@ Este projeto contém uma função serverless simples que responde a requisiçõe
 
 ## Provedor utilizado
 
-* GCP (Google Cloud Functions)
+* AWS Lambda com Amazon API Gateway
 
 ## Como rodar localmente
 
@@ -17,12 +17,12 @@ Este projeto contém uma função serverless simples que responde a requisiçõe
 
 1. Clone o repositório para sua máquina:
    ```bash
-   git clone https://github.com/seu-usuario/cloud-serverless-checkpoint1.git
+   git clone https://github.com/rafaellrsj2018/teste.git
    ```
 
 2. Entre na pasta do projeto:
    ```bash
-   cd cloud-serverless-checkpoint1
+   cd teste
    ```
 
 3. Instale as dependências do projeto:
@@ -56,7 +56,11 @@ curl -X POST http://localhost:3000/ \
 
 ## Como implantar na nuvem
 
-Este código pode ser usado em uma função HTTP do Google Cloud Functions. O ponto principal é exportar a função principal e responder com `req` e `res` em JSON.
+1. No console da AWS, crie uma função no serviço AWS Lambda usando o runtime Node.js 20.
+2. Faça upload dos arquivos do projeto, mantendo `index.js` na raiz.
+3. Configure o handler como `index.handler`.
+4. Crie um trigger HTTP usando o Amazon API Gateway.
+5. Teste a função pelo endpoint gerado pelo API Gateway.
 
 ## Observações importantes
 
