@@ -1,78 +1,41 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { handler } = require('../src/handler.js');
+const { handler, decodeMessage } = require('../src/handler.js');
 
-test('GET / returns a success payload with status 200', () => {
-  const req = {
-    method: 'GET',
-    url: '/?name=Aluno',
-    headers: { accept: 'application/json' },
-    query: { name: 'Aluno' },
-    body: undefined
+function eventoPubSub(data, extras = {}) {
+  return {
+    message: {
+      data: Buffer.from(data).toString('base64'),
+      messageId: 'mensagem-123',
+      attributes: { origem: 'teste' },
+      ...extras
+    },
+    subscription: 'projects/projeto/subscriptions/orders-sub'
   };
+}
 
-  const res = {
-    statusCode: 200,
-    headers: {},
-    body: '',
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    setHeader(name, value) {
-      this.headers[name] = value;
-      return this;
-    },
-    json(payload) {
-      this.body = JSON.stringify(payload);
-      return this;
-    },
-    send(payload) {
-      this.body = payload;
-      return this;
-    }
-  };
+test('processa uma mensagem JSON do Pub/Sub', () => {
+  const result = handler(eventoPubSub(JSON.stringify({ orderId: 'pedido-1', total: 99.9 })));
 
-  handler(req, res);
-
-  assert.equal(res.statusCode, 200);
-  assert.match(res.body, /Aluno/);
-  assert.match(res.body, /success|hello/i);
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 'success');
+  assert.deepEqual(result.data, { orderId: 'pedido-1', total: 99.9 });
+  assert.equal(result.messageId, 'mensagem-123');
+  assert.deepEqual(result.attributes, { origem: 'teste' });
 });
 
-test('POST / echoes the received message', () => {
-  const req = {
-    method: 'POST',
-    url: '/echo',
-    headers: { 'content-type': 'application/json' },
-    query: {},
-    body: { message: 'checkpoint' }
-  };
+test('aceita o formato CloudEvent do Cloud Functions', () => {
+  const mensagem = eventoPubSub(JSON.stringify({ orderId: 'pedido-2' })).message;
+  const result = handler({ data: { message: mensagem } });
 
-  const res = {
-    statusCode: 200,
-    headers: {},
-    body: '',
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    setHeader(name, value) {
-      this.headers[name] = value;
-      return this;
-    },
-    json(payload) {
-      this.body = JSON.stringify(payload);
-      return this;
-    },
-    send(payload) {
-      this.body = payload;
-      return this;
-    }
-  };
+  assert.deepEqual(result.data, { orderId: 'pedido-2' });
+  assert.equal(result.messageId, 'mensagem-123');
+});
 
-  handler(req, res);
+test('processa texto quando a mensagem não contém JSON', () => {
+  assert.equal(decodeMessage(eventoPubSub('pedido recebido')), 'pedido recebido');
+});
 
-  assert.equal(res.statusCode, 200);
-  assert.match(res.body, /checkpoint/);
+test('rejeita evento sem dados Pub/Sub', () => {
+  assert.throws(() => handler({ message: {} }), /message\.data é obrigatório/);
 });

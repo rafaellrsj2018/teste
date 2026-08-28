@@ -1,7 +1,7 @@
 {
-  "name": "serverless-checkpoint-1",
+  "name": "serverless-checkpoint-2",
   "version": "1.0.0",
-  "description": "Função HTTP simples para o checkpoint de serverless na nuvem",
+  "description": "Função orientada a eventos com Google Cloud Pub/Sub",
   "main": "index.js",
   "scripts": {
     "start": "node src/local.js",
@@ -10,10 +10,10 @@
   "keywords": [
     "serverless",
     "checkpoint",
-    "http",
+    "pubsub",
+    "gcp",
     "cloud",
-    "aws",
-    "lambda"
+    "serverless"
   ],
   "license": "MIT"
 }

@@ -1,10 +1,11 @@
-# Checkpoint 1 - Função Serverless na Nuvem
+# Checkpoint 2 - Processamento de pedidos com Pub/Sub
 
-Este projeto contém uma função serverless simples que responde a requisições HTTP e pode ser implantada em ambiente de nuvem.
+Este projeto contém uma função serverless orientada a eventos. Ela é acionada por mensagens publicadas em um tópico privado do Google Cloud Pub/Sub, como `orders`, e decodifica o conteúdo recebido.
 
 ## Provedor utilizado
 
-* AWS Lambda com Amazon API Gateway
+* Google Cloud Platform (GCP)
+* Google Cloud Pub/Sub
 
 ## Como rodar localmente
 
@@ -15,54 +16,28 @@ Este projeto contém uma função serverless simples que responde a requisiçõe
 
 ### Passo a passo
 
-1. Clone o repositório para sua máquina:
-   ```bash
-   git clone https://github.com/rafaellrsj2018/teste.git
-   ```
-
-2. Entre na pasta do projeto:
-   ```bash
-   cd teste
-   ```
-
-3. Instale as dependências do projeto:
+1. Clone o repositório e entre na pasta do projeto.
+2. Instale as dependências:
    ```bash
    npm install
    ```
-
-4. Rode o servidor local para testes:
+3. Execute os testes:
+   ```bash
+   npm test
+   ```
+4. Inicie o servidor local de simulação:
    ```bash
    npm start
    ```
-
-5. Acesse a função localmente:
+5. Em outro terminal, envie um envelope Pub/Sub de teste:
    ```bash
-   http://localhost:3000/?name=Aluno
+   node -e "const data = Buffer.from(JSON.stringify({orderId:'pedido-1'})).toString('base64'); fetch('http://localhost:3000', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({message:{data, messageId:'local-1'}})}).then(r=>r.text()).then(console.log)"
    ```
 
-### Exemplos de uso
+## Implantação
 
-#### GET
-```bash
-curl "http://localhost:3000/?name=Aluno"
-```
+No GCP, crie uma função com trigger do Pub/Sub apontando para o tópico escolhido e configure o entry point como `handler`. O código aceita o CloudEvent padrão, no qual a mensagem fica em `event.data.message`. As credenciais devem ser fornecidas pela configuração segura do ambiente, nunca commitadas no repositório.
 
-#### POST
-```bash
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{"message":"checkpoint"}'
-```
+## Entrega segura
 
-## Como implantar na nuvem
-
-1. No console da AWS, crie uma função no serviço AWS Lambda usando o runtime Node.js 20.
-2. Faça upload dos arquivos do projeto, mantendo `index.js` na raiz.
-3. Configure o handler como `index.handler`.
-4. Crie um trigger HTTP usando o Amazon API Gateway.
-5. Teste a função pelo endpoint gerado pelo API Gateway.
-
-## Observações importantes
-
-- O README não contém a URL pública da função ativa.
-- A URL da função em produção deve ser enviada apenas no campo privado do Canvas, conforme solicitado pelo professor.
+Este README não contém a URL ou informações de acesso da função ativa. A URL, quando existir, deve ser enviada somente no campo privado de comentários do Canvas.
