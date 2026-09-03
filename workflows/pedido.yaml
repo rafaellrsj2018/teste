@@ -1,6 +1,11 @@
 main:
   params: [entrada]
   steps:
+    - iniciarObservabilidade:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"orquestracao_iniciada messageId=" + entrada.messageId}
     - validar:
         try:
           call: http.post
@@ -27,6 +32,11 @@ main:
                       - data: ${base64.encode(json.encode({messageId: entrada.messageId, etapa: "validar", erro: erro}))}
             - interromperValidacao:
                 raise: ${erro}
+    - registrarProcessamento:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"etapa_processar messageId=" + entrada.messageId}
     - processar:
         try:
           call: http.post
@@ -53,6 +63,11 @@ main:
                       - data: ${base64.encode(json.encode({messageId: entrada.messageId, etapa: "processar", erro: erro}))}
             - interromperProcessamento:
                 raise: ${erro}
+    - registrarNotificacao:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"etapa_notificar messageId=" + entrada.messageId}
     - notificar:
         try:
           call: http.post

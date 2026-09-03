@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { handler, decodeMessage } = require('../src/handler.js');
 const { limparProcessados, orquestrarPedido } = require('../src/orchestrator.js');
+const { criarObservabilidade } = require('../src/observability.js');
 
 function eventoPubSub(data, extras = {}) {
   return {
@@ -88,4 +89,30 @@ test('envia falha definitiva para a DLQ', async () => {
   assert.equal(resultado.ok, false);
   assert.equal(resultado.status, 'failed');
   assert.deepEqual(mensagemDlq, resultado);
+});
+
+test('registra logs estruturados e métricas do pipeline', async () => {
+  limparProcessados();
+  const registros = [];
+  const monitoramento = criarObservabilidade({ logger: (linha) => registros.push(JSON.parse(linha)) });
+
+  handler(eventoPubSub(JSON.stringify({ orderId: 'pedido-6' })), { observabilidade: monitoramento });
+  await orquestrarPedido({
+    messageId: 'observabilidade-1',
+    pedido: { orderId: 'pedido-6' },
+    observabilidade: monitoramento
+  });
+  await orquestrarPedido({
+    messageId: 'observabilidade-1',
+    pedido: { orderId: 'pedido-6' },
+    observabilidade: monitoramento
+  });
+
+  const metricas = monitoramento.metricas();
+  assert.equal(metricas.mensagensRecebidas, 1);
+  assert.equal(metricas.mensagensProcessadas, 1);
+  assert.equal(metricas.mensagensDuplicadas, 1);
+  assert.ok(metricas.duracaoTotalMs >= 0);
+  assert.ok(registros.some((registro) => registro.message === 'mensagem_processada'));
+  assert.ok(registros.some((registro) => registro.message === 'mensagem_duplicada'));
 });

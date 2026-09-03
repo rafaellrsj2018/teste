@@ -1,4 +1,5 @@
 const processados = new Map();
+const { observabilidade } = require('./observability');
 
 function validarPedido(pedido) {
   if (!pedido || typeof pedido !== 'object' || !pedido.orderId) {
@@ -16,7 +17,7 @@ function notificarPedido(pedido) {
   return { ...pedido, notificado: true };
 }
 
-async function comRetry(acao, tentativas = 3) {
+async function comRetry(acao, tentativas = 3, monitoramento = observabilidade, etapa) {
   let ultimoErro;
 
   for (let tentativa = 1; tentativa <= tentativas; tentativa += 1) {
@@ -25,6 +26,8 @@ async function comRetry(acao, tentativas = 3) {
     } catch (error) {
       ultimoErro = error;
       if (tentativa < tentativas) {
+        monitoramento.incrementar('tentativasRetry');
+        monitoramento.registrar('retry_agendado', { etapa, tentativa, severity: 'WARNING' });
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
@@ -33,12 +36,16 @@ async function comRetry(acao, tentativas = 3) {
   throw ultimoErro;
 }
 
-async function orquestrarPedido({ messageId, pedido, etapas = {}, publicarNaDlq } = {}) {
+async function orquestrarPedido({ messageId, pedido, etapas = {}, publicarNaDlq, observabilidade: monitoramento = observabilidade } = {}) {
+  const inicio = Date.now();
+  monitoramento.registrar('orquestracao_iniciada', { messageId });
   if (!messageId) {
     throw new Error('messageId é obrigatório para idempotência');
   }
 
   if (processados.has(messageId)) {
+    monitoramento.incrementar('mensagensDuplicadas');
+    monitoramento.registrar('mensagem_duplicada', { messageId, severity: 'WARNING' });
     return { ...processados.get(messageId), duplicado: true };
   }
 
@@ -49,14 +56,18 @@ async function orquestrarPedido({ messageId, pedido, etapas = {}, publicarNaDlq 
   };
 
   try {
-    const validado = await comRetry(() => executar.validar(), 3);
-    const processado = await comRetry(() => executar.processar(validado), 3);
-    const resultado = await comRetry(() => executar.notificar(processado), 3);
+    const validado = await comRetry(() => executar.validar(), 3, monitoramento, 'validar');
+    const processado = await comRetry(() => executar.processar(validado), 3, monitoramento, 'processar');
+    const resultado = await comRetry(() => executar.notificar(processado), 3, monitoramento, 'notificar');
     const resposta = { ok: true, status: 'success', messageId, resultado };
     processados.set(messageId, resposta);
+    const duracaoMs = monitoramento.medir(inicio);
+    monitoramento.registrar('orquestracao_concluida', { messageId, duracaoMs });
     return resposta;
   } catch (error) {
+    monitoramento.incrementar('falhas');
     const falha = { ok: false, status: 'failed', messageId, error: error.message };
+    monitoramento.registrar('orquestracao_falhou', { messageId, error: error.message, severity: 'ERROR' });
     if (publicarNaDlq) {
       await publicarNaDlq(falha);
     }
