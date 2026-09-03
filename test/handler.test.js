@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { handler, decodeMessage } = require('../src/handler.js');
+const { limparProcessados, orquestrarPedido } = require('../src/orchestrator.js');
 
 function eventoPubSub(data, extras = {}) {
   return {
@@ -38,4 +39,53 @@ test('processa texto quando a mensagem não contém JSON', () => {
 
 test('rejeita evento sem dados Pub/Sub', () => {
   assert.throws(() => handler({ message: {} }), /message\.data é obrigatório/);
+});
+
+test('orquestra o pedido e retorna o mesmo resultado para mensagem duplicada', async () => {
+  limparProcessados();
+  const entrada = { messageId: 'orquestracao-1', pedido: { orderId: 'pedido-3' } };
+
+  const primeiro = await orquestrarPedido(entrada);
+  const duplicado = await orquestrarPedido(entrada);
+
+  assert.equal(primeiro.ok, true);
+  assert.equal(primeiro.resultado.notificado, true);
+  assert.equal(duplicado.duplicado, true);
+  assert.deepEqual(duplicado.resultado, primeiro.resultado);
+});
+
+test('repete uma etapa com falha transitória', async () => {
+  limparProcessados();
+  let tentativas = 0;
+
+  const resultado = await orquestrarPedido({
+    messageId: 'retry-1',
+    pedido: { orderId: 'pedido-4' },
+    etapas: {
+      processar: (pedido) => {
+        tentativas += 1;
+        if (tentativas < 2) throw new Error('falha transitória');
+        return { ...pedido, processado: true };
+      }
+    }
+  });
+
+  assert.equal(resultado.ok, true);
+  assert.equal(tentativas, 2);
+});
+
+test('envia falha definitiva para a DLQ', async () => {
+  limparProcessados();
+  let mensagemDlq;
+
+  const resultado = await orquestrarPedido({
+    messageId: 'dlq-1',
+    pedido: { orderId: 'pedido-5' },
+    etapas: { notificar: () => { throw new Error('serviço indisponível'); } },
+    publicarNaDlq: async (mensagem) => { mensagemDlq = mensagem; }
+  });
+
+  assert.equal(resultado.ok, false);
+  assert.equal(resultado.status, 'failed');
+  assert.deepEqual(mensagemDlq, resultado);
 });

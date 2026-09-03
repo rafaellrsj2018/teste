@@ -1,7 +1,7 @@
 {
-  "name": "serverless-checkpoint-2",
+  "name": "serverless-checkpoint-3",
   "version": "1.0.0",
-  "description": "Função orientada a eventos com Google Cloud Pub/Sub",
+  "description": "Orquestração de serviços serverless com Google Cloud Workflows",
   "main": "index.js",
   "scripts": {
     "start": "node src/local.js",

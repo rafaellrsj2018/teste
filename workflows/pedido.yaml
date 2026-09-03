@@ -1,0 +1,86 @@
+main:
+  params: [entrada]
+  steps:
+    - validar:
+        try:
+          call: http.post
+          args:
+            url: ${sys.get_env("VALIDAR_URL")}
+            body: ${entrada}
+          result: validacao
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 8
+            multiplier: 2
+        except:
+          as: erro
+          steps:
+            - enviarValidacaoParaDlq:
+                call: googleapis.pubsub.v1.projects.topics.publish
+                args:
+                  topic: ${sys.get_env("DLQ_TOPIC")}
+                  body:
+                    messages:
+                      - data: ${base64.encode(json.encode({messageId: entrada.messageId, etapa: "validar", erro: erro}))}
+            - interromperValidacao:
+                raise: ${erro}
+    - processar:
+        try:
+          call: http.post
+          args:
+            url: ${sys.get_env("PROCESSAR_URL")}
+            body: ${validacao.body}
+          result: processamento
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 8
+            multiplier: 2
+        except:
+          as: erro
+          steps:
+            - enviarProcessamentoParaDlq:
+                call: googleapis.pubsub.v1.projects.topics.publish
+                args:
+                  topic: ${sys.get_env("DLQ_TOPIC")}
+                  body:
+                    messages:
+                      - data: ${base64.encode(json.encode({messageId: entrada.messageId, etapa: "processar", erro: erro}))}
+            - interromperProcessamento:
+                raise: ${erro}
+    - notificar:
+        try:
+          call: http.post
+          args:
+            url: ${sys.get_env("NOTIFICAR_URL")}
+            body: ${processamento.body}
+          result: notificacao
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 8
+            multiplier: 2
+        except:
+          as: erro
+          steps:
+            - enviarParaDlq:
+                call: googleapis.pubsub.v1.projects.topics.publish
+                args:
+                  topic: ${sys.get_env("DLQ_TOPIC")}
+                  body:
+                    messages:
+                      - data: ${base64.encode(json.encode({messageId: entrada.messageId, erro: erro}))}
+            - interromperNotificacao:
+                raise: ${erro}
+    - retornar:
+        return:
+          ok: true
+          messageId: ${entrada.messageId}
+          resultado: ${notificacao.body}

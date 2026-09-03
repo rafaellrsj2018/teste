@@ -1,43 +1,56 @@
-# Checkpoint 2 - Processamento de pedidos com Pub/Sub
+# Checkpoint 3 - Orquestração de pedidos
 
-Este projeto contém uma função serverless orientada a eventos. Ela é acionada por mensagens publicadas em um tópico privado do Google Cloud Pub/Sub, como `orders`, e decodifica o conteúdo recebido.
+Pipeline serverless de processamento de pedidos com Google Cloud Workflows. O fluxo valida, processa e notifica o pedido em sequência, com retry, idempotência por `messageId` e encaminhamento de falhas para uma Dead-Letter Queue (DLQ).
 
 ## Provedor utilizado
 
 * Google Cloud Platform (GCP)
+* Google Cloud Workflows
 * Google Cloud Pub/Sub
 
 ## Como rodar localmente
 
 ### Pré-requisitos
 
-* Node.js instalado (versão 18 ou superior)
-* Terminal de comandos aberto
+* Node.js versão 18 ou superior
+* Terminal de comandos aberto na raiz do projeto
 
 ### Passo a passo
 
-1. Clone o repositório e entre na pasta do projeto.
-2. Instale as dependências:
+1. Instale as dependências:
    ```bash
    npm install
    ```
-3. Execute os testes:
+2. Execute os testes:
    ```bash
    npm test
    ```
-4. Inicie o servidor local de simulação:
+3. Inicie o servidor local da função Pub/Sub:
    ```bash
    npm start
    ```
-5. Em outro terminal, envie um envelope Pub/Sub de teste:
-   ```bash
-   node -e "const data = Buffer.from(JSON.stringify({orderId:'pedido-1'})).toString('base64'); fetch('http://localhost:3000', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({message:{data, messageId:'local-1'}})}).then(r=>r.text()).then(console.log)"
-   ```
 
-## Implantação
+O orquestrador pode ser executado em código Node.js importando `orquestrarPedido` de `src/orchestrator.js`. Ele aceita `messageId`, o objeto `pedido` e funções opcionais para substituir as etapas durante testes.
 
-No GCP, crie uma função com trigger do Pub/Sub apontando para o tópico escolhido e configure o entry point como `handler`. O código aceita o CloudEvent padrão, no qual a mensagem fica em `event.data.message`. As credenciais devem ser fornecidas pela configuração segura do ambiente, nunca commitadas no repositório.
+## Workflow
+
+A definição está em `workflows/pedido.yaml`. Antes de implantar, configure estas variáveis de ambiente do Workflow:
+
+* `VALIDAR_URL`
+* `PROCESSAR_URL`
+* `NOTIFICAR_URL`
+* `DLQ_TOPIC`
+
+As três chamadas HTTP usam até três tentativas com backoff exponencial. Falhas na notificação são publicadas no tópico DLQ. As funções devem tratar `messageId` como chave de idempotência; o exemplo local implementa essa proteção em memória.
+
+Exemplo de implantação:
+
+```bash
+gcloud workflows deploy pedido-orquestracao --source=workflows/pedido.yaml --location=us-central1
+```
+
+Configure autenticação das chamadas e permissões do Pub/Sub diretamente no GCP, usando Secret Manager ou Workload Identity quando necessário. Não coloque chaves, credenciais, arquivos `.json` ou URLs de funções ativas neste repositório.
 
 ## Entrega segura
 
-Este README não contém a URL ou informações de acesso da função ativa. A URL, quando existir, deve ser enviada somente no campo privado de comentários do Canvas.
+Envie o link deste repositório público no campo de URL do Canvas. Envie a URL privada da função ativa somente nos comentários ou na caixa de texto da entrega.
