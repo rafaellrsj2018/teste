@@ -1,28 +1,27 @@
-name: Deploy do Workflow
+name: Deploy no Render
 
 'on':
   push:
     branches: [main]
     paths:
-      - "workflows/**"
       - "src/**"
       - "test/**"
       - "package.json"
       - "package-lock.json"
+      - "render.yaml"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
-  group: deploy-producao
+  group: deploy-render
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Testar e publicar no Google Cloud
+    name: Testar e publicar no Render
     runs-on: ubuntu-latest
     environment: production
 
@@ -42,29 +41,17 @@ jobs:
       - name: Executar testes
         run: npm test
 
-      - name: Autenticar no Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Configurar Google Cloud CLI
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Publicar Workflow
+      - name: Publicar serviço no Render
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          GCP_REGION: ${{ vars.GCP_REGION }}
-          VALIDAR_URL: ${{ secrets.VALIDAR_URL }}
-          PROCESSAR_URL: ${{ secrets.PROCESSAR_URL }}
-          NOTIFICAR_URL: ${{ secrets.NOTIFICAR_URL }}
-          DLQ_TOPIC: ${{ secrets.DLQ_TOPIC }}
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
         run: |
-          gcloud workflows deploy pedido-orquestracao \
-            --project="$GCP_PROJECT_ID" \
-            --source=workflows/pedido.yaml \
-            --location="${GCP_REGION:-us-central1}" \
-            --call-log-level=log-all-calls \
-            --set-env-vars="VALIDAR_URL=$VALIDAR_URL,PROCESSAR_URL=$PROCESSAR_URL,NOTIFICAR_URL=$NOTIFICAR_URL,DLQ_TOPIC=$DLQ_TOPIC"
+          curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK"
+
+      - name: Verificar configuração do deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        if: ${{ env.RENDER_DEPLOY_HOOK == '' }}
+        run: |
+          echo "O Secret RENDER_DEPLOY_HOOK não foi configurado."
+          exit 1

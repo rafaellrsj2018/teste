@@ -1,13 +1,13 @@
-# Checkpoint 4 - Observabilidade do pipeline
+# Checkpoint 5 - CI/CD do pipeline
 
-Pipeline serverless de pedidos instrumentado com logging estruturado e métricas. A solução usa Google Cloud Logging/Monitoring, mantendo a idempotência, os retries e a DLQ do Checkpoint 3.
+Pipeline de pedidos instrumentado com logging estruturado e métricas, publicado automaticamente no Render por GitHub Actions.
 
 ## Provedor utilizado
 
-* Google Cloud Platform (GCP)
-* Google Cloud Workflows
-* Google Cloud Pub/Sub
-* Google Cloud Logging e Monitoring
+* Render
+* GitHub Actions
+* Node.js
+* Logs estruturados em JSON
 
 ## Como rodar localmente
 
@@ -33,27 +33,13 @@ Os logs locais são linhas JSON no stdout. Cada registro inclui `severity`, `mes
 * `falhas`: entradas inválidas ou execuções definitivas com erro.
 * `duracaoTotalMs`: duração acumulada das operações instrumentadas.
 
-O orquestrador registra `orquestracao_iniciada`, `retry_agendado`, `mensagem_duplicada`, `orquestracao_concluida` e `orquestracao_falhou`. O Workflow registra também o início e as etapas usando `sys.log`; esses registros aparecem no Cloud Logging quando o logging do Workflow está habilitado.
+O orquestrador registra `orquestracao_iniciada`, `retry_agendado`, `mensagem_duplicada`, `orquestracao_concluida` e `orquestracao_falhou`.
 
 ## Evidências
 
-Execute `npm test` e capture o terminal com os testes aprovados e as linhas JSON emitidas. No GCP, abra **Logging > Logs Explorer**, filtre pelos eventos `orquestracao_concluida` e `orquestracao_falhou`, e abra **Monitoring > Metrics** para visualizar as métricas derivadas dos logs. Os testes automatizados em `test/handler.test.js` comprovam processamento, duplicidade, retry, DLQ, logs e contadores.
+Execute `npm test` e capture o terminal com os 8 testes aprovados e as linhas JSON emitidas. No Render, confirme o serviço ativo e os logs da aplicação. Os testes automatizados em `test/handler.test.js` comprovam processamento, duplicidade, retry, DLQ, logs e contadores.
 
-Para criar métricas baseadas nos logs, use o console do Cloud Logging com filtros como:
-
-```text
-jsonPayload.message="orquestracao_concluida"
-jsonPayload.message="orquestracao_falhou"
-```
-
-Ou crie contadores no projeto GCP pelo terminal:
-
-```bash
-gcloud logging metrics create pedidos_processados --log-filter='jsonPayload.message="orquestracao_concluida"'
-gcloud logging metrics create pedidos_falhos --log-filter='jsonPayload.message="orquestracao_falhou"'
-```
-
-Não há prints ou URLs ativos versionados neste repositório. As capturas devem ser adicionadas à entrega do Canvas, após remover dados sensíveis.
+Não há prints ou URLs privadas versionados neste repositório. As capturas devem ser adicionadas à entrega do Canvas, após remover dados sensíveis.
 
 ## Análise e otimizações propostas
 
@@ -63,33 +49,20 @@ Não há prints ou URLs ativos versionados neste repositório. As capturas devem
 
 ## CI/CD e segurança
 
-O arquivo `.github/workflows/deploy.yml` executa `npm ci` e `npm test` antes de publicar o Workflow no Google Cloud. Ele é executado em alterações na branch `main` que afetem o código ou a definição do Workflow e também pode ser iniciado manualmente pela aba **Actions** do GitHub.
+O arquivo `.github/workflows/deploy.yml` executa `npm ci` e `npm test` antes de acionar o deploy do serviço no Render. Ele é executado em alterações na branch `main` que afetem o código ou a configuração do serviço e também pode ser iniciado manualmente pela aba **Actions** do GitHub. A definição do serviço está em `render.yaml`.
 
 ### Configuração dos secrets
 
-No repositório GitHub, crie o environment `production` e configure os seguintes valores. Todos, exceto `GCP_REGION`, devem ser cadastrados como **Secrets**; `GCP_REGION` pode ser uma variável comum do environment.
+No repositório GitHub, crie o environment `production` e configure o seguinte **Secret**:
 
-* `GCP_WORKLOAD_IDENTITY_PROVIDER`: recurso do provedor OIDC configurado no Google Cloud.
-* `GCP_SERVICE_ACCOUNT`: conta de serviço usada pelo deploy.
-* `GCP_PROJECT_ID`: ID do projeto GCP.
-* `VALIDAR_URL`: URL da função de validação.
-* `PROCESSAR_URL`: URL da função de processamento.
-* `NOTIFICAR_URL`: URL da função de notificação.
-* `DLQ_TOPIC`: nome completo do tópico Pub/Sub da DLQ.
-* `GCP_REGION`: região do Workflow, por exemplo `us-central1`.
+* `RENDER_DEPLOY_HOOK`: URL privada do Deploy Hook criado nas configurações do serviço Render.
 
-A conta de serviço precisa ter permissão para publicar versões do Workflows e para usar as APIs chamadas pelo Workflow. O provedor OIDC deve limitar o acesso ao repositório e à branch `main`. O pipeline não usa chaves JSON: a autenticação ocorre por credenciais temporárias via Workload Identity Federation.
+O Deploy Hook deve ser mantido somente nos Secrets do GitHub. O pipeline não utiliza usuário, senha ou chave JSON.
 
 ### Evidência do deploy
 
-Após a primeira execução bem-sucedida, abra **Actions > Deploy do Workflow**, selecione o job concluído e copie o link ou o log para a entrega no Canvas. A execução deve mostrar as etapas **Instalar dependências**, **Executar testes**, **Autenticar no Google Cloud** e **Publicar Workflow** com sucesso. Não versionar prints com tokens, URLs privadas ou outros dados sensíveis.
+Após a primeira execução bem-sucedida, abra **Actions > Deploy no Render**, selecione o job concluído e copie o link ou o log para a entrega no Canvas. A execução deve mostrar as etapas **Instalar dependências**, **Executar testes** e **Publicar serviço no Render** com sucesso. No painel do Render, confirme também que o deploy foi concluído. Não versionar prints com tokens, URLs privadas ou outros dados sensíveis.
 
-O comando equivalente para uma publicação manual, usando credenciais já configuradas localmente, é:
+O serviço Render executa a API Node definida em `src/local.js`, usando a porta fornecida pela variável `PORT`.
 
-```bash
-gcloud workflows deploy pedido-orquestracao --source=workflows/pedido.yaml --location=us-central1 --call-log-level=log-all-calls
-```
-
-A definição está em `workflows/pedido.yaml`. Configure no GCP as variáveis `VALIDAR_URL`, `PROCESSAR_URL`, `NOTIFICAR_URL` e `DLQ_TOPIC`, além das permissões das chamadas e do Pub/Sub.
-
-Use Secret Manager ou Workload Identity para credenciais. Nunca versione chaves, arquivos `.json`, `.env`, URLs de funções ativas ou links de dashboards privados.
+Nunca versione tokens, arquivos `.json`, `.env`, URLs privadas ou links de dashboards privados.
