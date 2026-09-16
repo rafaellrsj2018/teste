@@ -1,0 +1,70 @@
+name: Deploy do Workflow
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - "workflows/**"
+      - "src/**"
+      - "test/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-producao
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Testar e publicar no Google Cloud
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Executar testes
+        run: npm test
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configurar Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Publicar Workflow
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          VALIDAR_URL: ${{ secrets.VALIDAR_URL }}
+          PROCESSAR_URL: ${{ secrets.PROCESSAR_URL }}
+          NOTIFICAR_URL: ${{ secrets.NOTIFICAR_URL }}
+          DLQ_TOPIC: ${{ secrets.DLQ_TOPIC }}
+        run: |
+          gcloud workflows deploy pedido-orquestracao \
+            --project="$GCP_PROJECT_ID" \
+            --source=workflows/pedido.yaml \
+            --location="${GCP_REGION:-us-central1}" \
+            --call-log-level=log-all-calls \
+            --set-env-vars="VALIDAR_URL=$VALIDAR_URL,PROCESSAR_URL=$PROCESSAR_URL,NOTIFICAR_URL=$NOTIFICAR_URL,DLQ_TOPIC=$DLQ_TOPIC"

@@ -61,12 +61,35 @@ Não há prints ou URLs ativos versionados neste repositório. As capturas devem
 2. **Reduzir cardinalidade dos logs:** manter `messageId` para correlação, mas evitar incluir payloads e atributos de alta cardinalidade. Isso reduz volume de Logging e custo de armazenamento sem perder capacidade de diagnóstico.
 3. **Separar retry de falhas permanentes:** classificar respostas HTTP 4xx como não retryáveis e reservar as três tentativas para 5xx/timeouts. Isso diminui latência e chamadas inúteis, reduzindo custo e acelerando o envio de mensagens inválidas para a DLQ.
 
-## Workflow e segurança
+## CI/CD e segurança
 
-A definição está em `workflows/pedido.yaml`. Configure no GCP as variáveis `VALIDAR_URL`, `PROCESSAR_URL`, `NOTIFICAR_URL` e `DLQ_TOPIC`, além das permissões das chamadas e do Pub/Sub.
+O arquivo `.github/workflows/deploy.yml` executa `npm ci` e `npm test` antes de publicar o Workflow no Google Cloud. Ele é executado em alterações na branch `main` que afetem o código ou a definição do Workflow e também pode ser iniciado manualmente pela aba **Actions** do GitHub.
+
+### Configuração dos secrets
+
+No repositório GitHub, crie o environment `production` e configure os seguintes valores. Todos, exceto `GCP_REGION`, devem ser cadastrados como **Secrets**; `GCP_REGION` pode ser uma variável comum do environment.
+
+* `GCP_WORKLOAD_IDENTITY_PROVIDER`: recurso do provedor OIDC configurado no Google Cloud.
+* `GCP_SERVICE_ACCOUNT`: conta de serviço usada pelo deploy.
+* `GCP_PROJECT_ID`: ID do projeto GCP.
+* `VALIDAR_URL`: URL da função de validação.
+* `PROCESSAR_URL`: URL da função de processamento.
+* `NOTIFICAR_URL`: URL da função de notificação.
+* `DLQ_TOPIC`: nome completo do tópico Pub/Sub da DLQ.
+* `GCP_REGION`: região do Workflow, por exemplo `us-central1`.
+
+A conta de serviço precisa ter permissão para publicar versões do Workflows e para usar as APIs chamadas pelo Workflow. O provedor OIDC deve limitar o acesso ao repositório e à branch `main`. O pipeline não usa chaves JSON: a autenticação ocorre por credenciais temporárias via Workload Identity Federation.
+
+### Evidência do deploy
+
+Após a primeira execução bem-sucedida, abra **Actions > Deploy do Workflow**, selecione o job concluído e copie o link ou o log para a entrega no Canvas. A execução deve mostrar as etapas **Instalar dependências**, **Executar testes**, **Autenticar no Google Cloud** e **Publicar Workflow** com sucesso. Não versionar prints com tokens, URLs privadas ou outros dados sensíveis.
+
+O comando equivalente para uma publicação manual, usando credenciais já configuradas localmente, é:
 
 ```bash
 gcloud workflows deploy pedido-orquestracao --source=workflows/pedido.yaml --location=us-central1 --call-log-level=log-all-calls
 ```
+
+A definição está em `workflows/pedido.yaml`. Configure no GCP as variáveis `VALIDAR_URL`, `PROCESSAR_URL`, `NOTIFICAR_URL` e `DLQ_TOPIC`, além das permissões das chamadas e do Pub/Sub.
 
 Use Secret Manager ou Workload Identity para credenciais. Nunca versione chaves, arquivos `.json`, `.env`, URLs de funções ativas ou links de dashboards privados.
