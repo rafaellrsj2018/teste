@@ -1,11 +1,12 @@
 const http = require('http');
 const { handler } = require('./handler');
+const { orquestrarPedido } = require('./orchestrator');
 
 const server = http.createServer((req, res) => {
   const bodyChunks = [];
 
   req.on('data', (chunk) => bodyChunks.push(chunk));
-  req.on('end', () => {
+  req.on('end', async () => {
     let event = {};
 
     try {
@@ -18,7 +19,10 @@ const server = http.createServer((req, res) => {
     }
 
     try {
-      const result = handler(event);
+      const recebido = handler(event);
+      const result = req.url === '/pedidos'
+        ? await orquestrarPedido({ messageId: recebido.messageId, pedido: recebido.data })
+        : recebido;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (error) {

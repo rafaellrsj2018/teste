@@ -1,5 +1,6 @@
 const processados = new Map();
 const { observabilidade } = require('./observability');
+const { agenteIa } = require('./ai');
 
 function validarPedido(pedido) {
   if (!pedido || typeof pedido !== 'object' || !pedido.orderId) {
@@ -36,7 +37,7 @@ async function comRetry(acao, tentativas = 3, monitoramento = observabilidade, e
   throw ultimoErro;
 }
 
-async function orquestrarPedido({ messageId, pedido, etapas = {}, publicarNaDlq, observabilidade: monitoramento = observabilidade } = {}) {
+async function orquestrarPedido({ messageId, pedido, etapas = {}, publicarNaDlq, observabilidade: monitoramento = observabilidade, ia = agenteIa } = {}) {
   const inicio = Date.now();
   monitoramento.registrar('orquestracao_iniciada', { messageId });
   if (!messageId) {
@@ -51,13 +52,15 @@ async function orquestrarPedido({ messageId, pedido, etapas = {}, publicarNaDlq,
 
   const executar = {
     validar: etapas.validar || (() => validarPedido(pedido)),
+    ia: etapas.ia || ((resultado) => ia.analisar(resultado)),
     processar: etapas.processar || ((resultado) => processarPedido(resultado)),
     notificar: etapas.notificar || ((resultado) => notificarPedido(resultado))
   };
 
   try {
     const validado = await comRetry(() => executar.validar(), 3, monitoramento, 'validar');
-    const processado = await comRetry(() => executar.processar(validado), 3, monitoramento, 'processar');
+    const analisado = await comRetry(() => executar.ia(validado), 3, monitoramento, 'ia');
+    const processado = await comRetry(() => executar.processar({ ...validado, analiseIa: analisado }), 3, monitoramento, 'processar');
     const resultado = await comRetry(() => executar.notificar(processado), 3, monitoramento, 'notificar');
     const resposta = { ok: true, status: 'success', messageId, resultado };
     processados.set(messageId, resposta);

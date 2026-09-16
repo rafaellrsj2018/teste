@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { handler, decodeMessage } = require('../src/handler.js');
 const { limparProcessados, orquestrarPedido } = require('../src/orchestrator.js');
 const { criarObservabilidade } = require('../src/observability.js');
+const { classificacaoLocal } = require('../src/ai.js');
 
 function eventoPubSub(data, extras = {}) {
   return {
@@ -73,6 +74,20 @@ test('repete uma etapa com falha transitória', async () => {
 
   assert.equal(resultado.ok, true);
   assert.equal(tentativas, 2);
+});
+
+test('analisa o pedido com IA antes do processamento', async () => {
+  limparProcessados();
+  const resultado = await orquestrarPedido({
+    messageId: 'ia-1',
+    pedido: { orderId: 'pedido-ia', total: 700 },
+    ia: { analisar: async (pedido) => classificacaoLocal(pedido) }
+  });
+
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.resultado.analiseIa.categoria, 'alto_valor');
+  assert.equal(resultado.resultado.analiseIa.recomendacao, 'revisao_manual');
+  assert.equal(resultado.resultado.analiseIa.provedor, 'local');
 });
 
 test('envia falha definitiva para a DLQ', async () => {
